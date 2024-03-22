@@ -8,6 +8,7 @@
 #include <unordered_set>
 #include <chrono>
 #include <numeric>
+#include <climits>
 
 using std::vector;
 using std::cin;
@@ -110,34 +111,40 @@ uint32_t generateSeed() {
 }
 
 // https://en.wikipedia.org/wiki/Hopscotch_hashing
-class HopscotchHashSet {
-private:
+template<typename T> class HopscotchHashSet { // TODO optimize performance by removing IF's, add loadfactor
+private: // TODO dehardcode
     static const uint32_t HOP_RANGE = 32; // max range for key to be from bucket, can't be increased without changing bitmap type
     static const uint32_t ADD_RANGE = 256; // max range for looking into empty cell
     static const uint32_t MAX_TRIES = 5; // max tries for consecutive resizing
     static const uint32_t modPrime = 100000007; // hash function will be mod this, then mod table size
     uint32_t Seed = 0x811C9DC5;
+    T default_value{}; // TODO migrate hash on templates, add adequate default value
 
     // We'll need these 2 for every call of ADD
-    uint32_t bad_bucket_ind = 0; // index of bucket with -1's
+    uint32_t bad_bucket_ind = 0; // index of bucket with ind==hash(default_value)
     uint32_t bad_bucket_bitmap = 0; // bitmap of that bucket
 
-    // initially filled with key=-1 and bitmap=0
-    vector<pair<int, uint32_t>> values; // key + bitmap that contains info about ith bucket
-
+    // initially filled with key=default_key and bitmap=0
+    vector<pair<T, uint32_t>> values; // key + bitmap that contains info about ith bucket
 
     void resize(); // double the size, rehash
-    bool tryadd(int key); // add element without resize
+    bool tryadd(T key); // add element without resize
 
 public:
-    void init(uint32_t size, uint32_t seed); // init table of this size and this seed
-    bool contains(int key);
-    bool add (int key); // add with resize if needed
-    bool remove(int key); // TODO optional: add runtime errors if not exists
+    void init(uint32_t size = 1024, uint32_t seed = recommendedSeed); // init table of this size and this seed
+    bool contains(T key);
+    bool add (T key); // add with resize if needed
+    bool remove(T key); // TODO optional: add runtime errors if not exists
     void print(); // prints table
+    //void get_doc(); // prints documentation
 };
 
-void HopscotchHashSet::print() {
+/*template<typename T> void HopscotchHashSet<T>::get_doc() {
+    cout << "This is the documentation for Hopscotch hash table:\n"
+            << "HOP_RANGE can't be >32\n"
+}*/
+
+template<typename T> void HopscotchHashSet<T>::print() {
     cout << "Table: ";
     for (auto v: values) {
         cout << v.first << " ";
@@ -151,18 +158,19 @@ void HopscotchHashSet::print() {
     cout << "Bad_bucket_bitmap: " << bad_bucket_bitmap << endl;
 }
 
-void HopscotchHashSet::init(uint32_t size = 1024, uint32_t seed = recommendedSeed) {
-    vector<pair<int, uint32_t>> temp;
+template<typename T> void HopscotchHashSet<T>::init(uint32_t size, uint32_t seed) {
+    vector<pair<T, uint32_t>> temp;
     if (size > myPow(2, 30)) // just above 1 billion
         throw std::runtime_error("Size is too big!");
-    temp.resize(size, pair(-1, 0));
+    temp.resize(size, pair(default_value, 0));
     values = temp;
     Seed = seed;
     bad_bucket_bitmap = 0;
-    bad_bucket_ind = (myhash(-1, Seed) % modPrime) % values.size();
+    bad_bucket_ind = (myhash(default_value, Seed) % modPrime) % values.size();
+    // cout << "Default value: " << default_value << endl;
 }
 
-void HopscotchHashSet::resize() {
+template<typename T> void HopscotchHashSet<T>::resize() {
     for (uint32_t iteration = 1; iteration <= MAX_TRIES; ++iteration) {
         uint32_t seed = generateSeed(); // generate new seed,
         // since 2xing the size won't resolve hash collision -- just make 2x fewer collisions in any bucket
@@ -174,7 +182,7 @@ void HopscotchHashSet::resize() {
 
         bool flag = true; // is resize successful
         for (uint32_t i = 0; i < values.size(); ++i) {
-            if (values[i].first != -1 or (bad_bucket_ind <= i // add if elem != -1 or is a real -1
+            if (values[i].first != default_value or (bad_bucket_ind <= i // add if elem != default_value or is a real default_value
                     and static_cast<int>(bad_bucket_ind) >= static_cast<int>(i) - static_cast<int>(HOP_RANGE)
                     and bit_check(bad_bucket_bitmap, i - bad_bucket_ind))) {
                 bool isAddSuccessful = newSet.tryadd(values[i].first);
@@ -193,11 +201,10 @@ void HopscotchHashSet::resize() {
         }
     }
     // Failed to resize & rehash table for some reason
-    string exceptionmsg = "Can not resize table";
-    throw std::runtime_error("Error: " + exceptionmsg);
+    throw std::runtime_error("Error: Can not resize table");
 }
 
-bool HopscotchHashSet::contains(int key) {
+template<typename T> bool HopscotchHashSet<T>::contains(T key) {
     uint32_t bucket_ind = (myhash(key, Seed) % modPrime) % values.size();
     uint32_t bucket_bitmap = values[bucket_ind].second; // get bitmap
     for (uint32_t i = 0; i < HOP_RANGE; ++i) {
@@ -209,14 +216,14 @@ bool HopscotchHashSet::contains(int key) {
     return false;
 }
 
-bool HopscotchHashSet::remove(int key) { // returns true if element was in set and false if wasn't
+template<typename T> bool HopscotchHashSet<T>::remove(T key) { // returns true if element was in set and false if wasn't
     uint32_t bucket_ind = (myhash(key, Seed) % modPrime) % values.size();
     uint32_t bucket_bitmap = values[bucket_ind].second; // get bitmap
     for (uint32_t i = 0; i < HOP_RANGE; ++i) {
         if (bit_check(bucket_bitmap, i) && values[bucket_ind + i].first == key) {
-            values[bucket_ind + i].first = -1;
+            values[bucket_ind + i].first = default_value;
             bit_clear_change(values[bucket_ind].second, i);
-            if (key == -1)
+            if (key == default_value)
                 bit_clear_change(bad_bucket_bitmap, i);
             return true;
         }
@@ -224,11 +231,11 @@ bool HopscotchHashSet::remove(int key) { // returns true if element was in set a
     return false;
 }
 
-bool HopscotchHashSet::tryadd(int key) { // true if successful, false if failed
+template<typename T> bool HopscotchHashSet<T>::tryadd(T key) { // true if successful, false if failed
     if (values.empty()) {
-        pair<int, uint32_t> temp = pair(key, 0);
+        pair<T, uint32_t> temp = pair(key, 0);
         values.push_back(temp);
-        if (key == -1)
+        if (key == default_value)
             bad_bucket_bitmap = 1;
         return true;
     }
@@ -238,23 +245,23 @@ bool HopscotchHashSet::tryadd(int key) { // true if successful, false if failed
 
     for (uint32_t addind = 0; addind < std::min(static_cast<int>(ADD_RANGE),
                                           static_cast<int>(values.size()) - static_cast<int>(bucket_ind)); ++addind) {
-        if (values[bucket_ind + addind].first == -1) {
+        if (values[bucket_ind + addind].first == default_value) {
             // current index = bucket_ind + ind
             // equals bad_bucket_ind + ...
             if (bad_bucket_ind > bucket_ind + addind or static_cast<int>(bad_bucket_ind) <
                     static_cast<int>(bucket_ind) + static_cast<int>(addind) - static_cast<int>(HOP_RANGE)) {
-                // bad_bucket is out of range for current cell, thus -1 is fake
+                // bad_bucket is out of range for current cell, thus default_value is fake
                 found = true;
                 freeaddind = addind;
                 break;
             } else {
                 if (!bit_check(bad_bucket_bitmap, bucket_ind + addind - bad_bucket_ind)) {
-                    // found 0 on bad_bucket_bitmap ==> -1 is fake
+                    // found 0 on bad_bucket_bitmap ==> default_value is fake
                     found = true;
                     freeaddind = addind;
                     break;
                 }
-                // else -1 is real, just do nothing
+                // else default_value is real, just do nothing
             }
         }
     }
@@ -265,7 +272,7 @@ bool HopscotchHashSet::tryadd(int key) { // true if successful, false if failed
         // we can insert without moving
         values[bucket_ind + freeaddind].first = key;
         bit_set_change(values[bucket_ind].second, freeaddind);
-        if (key == -1)
+        if (key == default_value)
             bad_bucket_bitmap = values[bad_bucket_ind].second;
         return true;
     }
@@ -296,35 +303,32 @@ bool HopscotchHashSet::tryadd(int key) { // true if successful, false if failed
     // now that we moved elements, free space is in range HOP_RANGE
     values[bucket_ind + freeaddind].first = key;
     bit_set_change(values[bucket_ind].second, freeaddind);
-    if (key == -1)
+    if (key == default_value)
         bad_bucket_bitmap = values[bad_bucket_ind].second;
     return true;
 }
 
-bool HopscotchHashSet::add(int key) { // true if no resize happened, false if resize
+template<typename T> bool HopscotchHashSet<T>::add(T key) { // true if no resize happened, false if resize
     bool is_successful = tryadd(key);
-    if (is_successful) {
+    if (is_successful)
         return true;
-    }
     uint32_t iter_count = 0;
     while (iter_count < MAX_TRIES) {
         resize();
         bool is_successful_now = tryadd(key);
-        if (is_successful_now) {
+        if (is_successful_now)
             return false;
-        }
         ++iter_count;
     }
     // Failed to add element
     uint32_t bucket_ind = (myhash(key, Seed) % modPrime) % values.size();
     if (values[bucket_ind].second + 1 == 0)
         throw std::runtime_error("33 elems with same hash");
-    string exceptionmsg = "Can not add element";
-    throw std::runtime_error("Error: " + exceptionmsg);
+    throw std::runtime_error("Error: Can not add element"); // TODO optional: different runtime errors for tryadd and add
 }
 
 void testAdd(int numTries, int numElems) {
-    std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+    //std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
     // times
     vector<double> hoptimes;
@@ -338,13 +342,13 @@ void testAdd(int numTries, int numElems) {
         // generate elems
         vector<int> keys;
         keys.reserve(numElems);
-        for (int i = 0; i < numElems; ++i) {
+        for (int j = 0; j < numElems; ++j) {
             keys.push_back(distrib(gen));
         }
 
         // do testing
         std::chrono::steady_clock::time_point hopstart = std::chrono::steady_clock::now();
-        HopscotchHashSet hoptable;
+        HopscotchHashSet<int> hoptable;
         for (int key : keys) {
             hoptable.add(key);
         }
@@ -377,14 +381,14 @@ void testAdd(int numTries, int numElems) {
     cout << "Hopscotch STD: " << hopstdev << endl;
     cout << "Average STL time: " << stlmean << endl;
     cout << "STL STD: " << stlstdev << endl;
-    std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-    std::chrono::duration<double> time_elapsed = end - begin;
-    cout << "Time elapsed: " << time_elapsed << endl;
+    //std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+    //std::chrono::duration<double> time_elapsed = end - begin;
+    //cout << "Time elapsed: " << time_elapsed << endl;
     cout << endl;
 }
 
 void testRemove(int numTries, int numElems, int numChecks) {
-    std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+    //std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
     // sanity check
     assert(numElems >= numChecks);
@@ -396,8 +400,6 @@ void testRemove(int numTries, int numElems, int numChecks) {
     random_device rd;
     mt19937 gen(rd());
     uniform_int_distribution<int> distrib(INT_MIN, INT_MAX);
-
-
 
     for (int i = 0; i < numTries; ++i) {
         // generate elems
@@ -412,7 +414,7 @@ void testRemove(int numTries, int numElems, int numChecks) {
         testkeys = keys;
         auto rng = std::default_random_engine {rd()};
         std::shuffle(std::begin(testkeys), std::end(testkeys), rng);
-        HopscotchHashSet hoptable;
+        HopscotchHashSet<int> hoptable;
         for (int key : keys) {
             hoptable.add(key);
         }
@@ -455,14 +457,14 @@ void testRemove(int numTries, int numElems, int numChecks) {
     cout << "Hopscotch STD: " << hopstdev << endl;
     cout << "Average STL time: " << stlmean << endl;
     cout << "STL STD: " << stlstdev << endl;
-    std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-    std::chrono::duration<double> time_elapsed = end - begin;
-    cout << "Time elapsed: " << time_elapsed << endl;
+    //std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+    //std::chrono::duration<double> time_elapsed = end - begin;
+    //cout << "Time elapsed: " << time_elapsed << endl;
     cout << endl;
 }
 
 void testTrueContains(int numTries, int numElems, int numChecks) {
-    std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+    //std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
     // times
     vector<double> hoptimes;
@@ -471,6 +473,9 @@ void testTrueContains(int numTries, int numElems, int numChecks) {
     random_device rd;
     mt19937 gen(rd());
     uniform_int_distribution<int> distrib(INT_MIN, INT_MAX);
+
+    bool temp;
+    int counter = 0; // to force compiler to do something on release
 
     for (int i = 0; i < numTries; ++i) {
         // generate elems
@@ -487,13 +492,15 @@ void testTrueContains(int numTries, int numElems, int numChecks) {
         std::shuffle(std::begin(testkeys), std::end(testkeys), rng);
 
         // do testing
-        HopscotchHashSet hoptable;
+        HopscotchHashSet<int> hoptable;
         for (int key : keys) {
             hoptable.add(key);
         }
         std::chrono::steady_clock::time_point hopstart = std::chrono::steady_clock::now();
         for (int j = 0; j < numChecks; ++j) {
-            hoptable.contains(testkeys[j % numElems]);
+            temp = hoptable.contains(testkeys[j % numElems]);
+            if (temp)
+                ++counter;
         }
         std::chrono::steady_clock::time_point hopend = std::chrono::steady_clock::now();
         unordered_multiset<int> stlset;
@@ -502,7 +509,9 @@ void testTrueContains(int numTries, int numElems, int numChecks) {
         }
         std::chrono::steady_clock::time_point stlstart = std::chrono::steady_clock::now();
         for (int j = 0; j < numChecks; ++j) {
-            stlset.contains(testkeys[j % numElems]);
+            temp = stlset.contains(testkeys[j % numElems]);
+            if (temp)
+                ++counter;
         }
         std::chrono::steady_clock::time_point stlend = std::chrono::steady_clock::now();
 
@@ -528,14 +537,15 @@ void testTrueContains(int numTries, int numElems, int numChecks) {
     cout << "Hopscotch STD: " << hopstdev << endl;
     cout << "Average STL time: " << stlmean << endl;
     cout << "STL STD: " << stlstdev << endl;
-    std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-    std::chrono::duration<double> time_elapsed = end - begin;
-    cout << "Time elapsed: " << time_elapsed << endl;
+    //std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+    //std::chrono::duration<double> time_elapsed = end - begin;
+    //cout << "Time elapsed: " << time_elapsed << endl;
+    cout << "Counter: " << counter << endl;
     cout << endl;
 }
 
 void testFalseContains(int numTries, int numElems, int numChecks) {
-    std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+    //std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
     // times
     vector<double> hoptimes;
@@ -545,6 +555,9 @@ void testFalseContains(int numTries, int numElems, int numChecks) {
     mt19937 gen(rd());
     uniform_int_distribution<int> distrib(INT_MIN, INT_MAX);
 
+    bool temp;
+    int counter = 0; // to force compiler to do something on release
+
     for (int i = 0; i < numTries; ++i) {
         // generate elems
         vector<int> keys;
@@ -553,30 +566,39 @@ void testFalseContains(int numTries, int numElems, int numChecks) {
             keys.push_back(distrib(gen));
         }
 
+        // fill stlset first! required for testing
+        unordered_multiset<int> stlset;
+        for (int key : keys) {
+            stlset.insert(key);
+        }
+
         // generate test
         vector<int> testkeys;
         testkeys.reserve(numChecks);
-        for (int j = 0; j < numChecks; ++j) {
-            testkeys.push_back(distrib(gen));
+        while (static_cast<int>(testkeys.size()) < numChecks) {
+            int testcase = distrib(gen);
+            if (!stlset.contains(testcase))
+                testkeys.push_back(testcase);
         }
 
         // do testing
-        HopscotchHashSet hoptable;
+        HopscotchHashSet<int> hoptable;
         for (int key : keys) {
             hoptable.add(key);
         }
         std::chrono::steady_clock::time_point hopstart = std::chrono::steady_clock::now();
         for (int key: testkeys) {
-            hoptable.contains(key);
+            temp = hoptable.contains(key);
+            if (!temp)
+                ++counter;
         }
         std::chrono::steady_clock::time_point hopend = std::chrono::steady_clock::now();
-        unordered_multiset<int> stlset;
-        for (int key : keys) {
-            stlset.insert(key);
-        }
+
         std::chrono::steady_clock::time_point stlstart = std::chrono::steady_clock::now();
         for (int key : testkeys) {
-            stlset.contains(key);
+            temp = stlset.contains(key);
+            if (!temp)
+                ++counter;
         }
         std::chrono::steady_clock::time_point stlend = std::chrono::steady_clock::now();
 
@@ -602,9 +624,10 @@ void testFalseContains(int numTries, int numElems, int numChecks) {
     cout << "Hopscotch STD: " << hopstdev << endl;
     cout << "Average STL time: " << stlmean << endl;
     cout << "STL STD: " << stlstdev << endl;
-    std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-    std::chrono::duration<double> time_elapsed = end - begin;
-    cout << "Time elapsed: " << time_elapsed << endl;
+    //std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+    //std::chrono::duration<double> time_elapsed = end - begin;
+    //cout << "Time elapsed: " << time_elapsed << endl;
+    cout << "Counter: " << counter << endl;
     cout << endl;
 }
 
