@@ -24,7 +24,6 @@ using std::swap;
 using std::unordered_set;
 using std::unordered_multiset;
 
-
 // helper functions
 inline uint32_t bit_set(uint32_t number, uint32_t n) {
     return number | ((uint32_t)1 << n);
@@ -98,9 +97,22 @@ uint32_t fnv1a(const void* data, size_t numBytes, uint32_t hash /*= Seed*/)
     return hash;
 }
 
-uint32_t myhash(int key, uint32_t seed) {
+/*
+ * hopscotch_hashset<int>
+ * hopscotch_hashset<double>
+ *
+ * struct Point { int x, y, z; };
+ * hopscotch_hashset<Point>
+ *
+ * */
+
+template<typename T> uint32_t myhash(T key, uint32_t seed) {
     return fnv1a(&key, sizeof(key), seed);
 }
+
+/*uint32_t myhash(int key, uint32_t seed) {
+    return fnv1a(&key, sizeof(key), seed);
+}*/
 
 uint32_t generateSeed() {
     random_device rd;
