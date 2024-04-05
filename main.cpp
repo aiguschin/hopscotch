@@ -131,11 +131,11 @@ uint32_t generateSeed() {
 
 // https://en.wikipedia.org/wiki/Hopscotch_hashing
 template<typename T> class HopscotchHashSet { // TODO optimize performance by removing IF's
-private: // TODO dehardcode
+private: // TODO dehardcode, add default init
     static const uint32_t HOP_RANGE = 32; // max range for key to be from bucket, can't be increased without changing bitmap type
     static const uint32_t ADD_RANGE = 256; // max range for looking into empty cell
     static const uint32_t MAX_TRIES = 5; // max tries for consecutive resizing
-    static const uint32_t modPrime = 100000007; // hash function will be mod this, then mod table size
+    //static const uint32_t modPrime = 100000007; // hash function will be mod this, then mod table size TODO get rid of this
     uint32_t Seed = 0x811C9DC5;
     T default_value{};
 
@@ -148,7 +148,7 @@ private: // TODO dehardcode
 
     void resize(); // double the size, rehash
     bool tryadd(T key); // add element without resize
-    uint32_t num_elements = 0; // number of elements
+    uint32_t num_elements = 0; // number of elements TODO maybe not increment it each time and make it an O(n) function?
     bool is_resize_allowed = true; // if false, table will just die instead of resizing -- for testing purposes
 
 public:
@@ -221,7 +221,7 @@ template<typename T> void HopscotchHashSet<T>::init(uint32_t size, uint32_t seed
     values = temp;
     Seed = seed;
     bad_bucket_bitmap = 0;
-    bad_bucket_ind = (myhash(default_value, Seed) % modPrime) % values.size();
+    bad_bucket_ind = myhash(default_value, Seed) % values.size();
     num_elements = 0;
     is_resize_allowed = true;
 }
@@ -263,7 +263,7 @@ template<typename T> void HopscotchHashSet<T>::resize() {
 }
 
 template<typename T> bool HopscotchHashSet<T>::contains(T key) {
-    uint32_t bucket_ind = (myhash(key, Seed) % modPrime) % values.size();
+    uint32_t bucket_ind = myhash(key, Seed) % values.size();
     uint32_t bucket_bitmap = values[bucket_ind].second; // get bitmap
     for (uint32_t i = 0; i < HOP_RANGE; ++i) { // TODO optimize with minbit?
         // check if (bucket_ind + i)'th cell contains value corresponding to this bucket
@@ -275,7 +275,7 @@ template<typename T> bool HopscotchHashSet<T>::contains(T key) {
 }
 
 template<typename T> void HopscotchHashSet<T>::remove(T key) {
-    uint32_t bucket_ind = (myhash(key, Seed) % modPrime) % values.size();
+    uint32_t bucket_ind = myhash(key, Seed) % values.size();
     uint32_t bucket_bitmap = values[bucket_ind].second; // get bitmap
     for (uint32_t i = 0; i < HOP_RANGE; ++i) { // TODO optimize with minbit?
         if (bit_check(bucket_bitmap, i) && values[(bucket_ind + i) % values.size()].first == key) {
@@ -300,7 +300,7 @@ template<typename T> bool HopscotchHashSet<T>::tryadd(T key) { // true if succes
         return true;
     }
     int size = static_cast<int>(values.size());
-    uint32_t bucket_ind = (myhash(key, Seed) % modPrime) % size;
+    uint32_t bucket_ind = myhash(key, Seed) % size;
     bool found = false;
     uint32_t freeaddind;
 
@@ -385,7 +385,7 @@ template<typename T> bool HopscotchHashSet<T>::add(T key) { // true if no resize
         ++iter_count;
     }
     // Failed to add element
-    uint32_t bucket_ind = (myhash(key, Seed) % modPrime) % values.size();
+    uint32_t bucket_ind = myhash(key, Seed) % values.size();
     T elem = values[bucket_ind].first;
     bool flag = true; // check if we have 33 equal elems
     for (int i = 1; i < HOP_RANGE; ++i) {
@@ -773,6 +773,7 @@ void testIntFalseContains(int numTries, int numElems, int numChecks) {
 }
 
 int main() {
+    // TODO split in several files (HopscotchHashSet into .h, testing functions into another one)
     cout << "Testing...\n\n";
     testIntAdd(100, 1'000'000);
     testIntRemove(100, 1'000'000, 1'000'000);
