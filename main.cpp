@@ -67,7 +67,7 @@ uint32_t minbit(uint32_t x) { // returns minimal bit that equals 1
     return static_cast<uint32_t>(log2(x & ~(x-1)));
 }
 
-int myPow(int x, uint32_t p)
+/*int myPow(int x, uint32_t p)
 {
     if (p == 0) return 1;
     if (p == 1) return x;
@@ -75,7 +75,7 @@ int myPow(int x, uint32_t p)
     int tmp = myPow(x, p/2);
     if (p % 2 == 0) return tmp * tmp;
     else return x * tmp * tmp;
-}
+}*/
 
 uint32_t myMod(int x, int p) {
     // Returns MATHEMATICALLY x % p (the number from 0 to p-1)
@@ -135,7 +135,6 @@ private: // TODO dehardcode, add default init
     static const uint32_t HOP_RANGE = 32; // max range for key to be from bucket, can't be increased without changing bitmap type
     static const uint32_t ADD_RANGE = 256; // max range for looking into empty cell
     static const uint32_t MAX_TRIES = 5; // max tries for consecutive resizing
-    //static const uint32_t modPrime = 100000007; // hash function will be mod this, then mod table size TODO get rid of this
     uint32_t Seed = 0x811C9DC5;
     T default_value{};
 
@@ -215,8 +214,6 @@ template<typename T> void HopscotchHashSet<T>::print() {
 
 template<typename T> void HopscotchHashSet<T>::init(uint32_t size, uint32_t seed) {
     vector<pair<T, uint32_t>> temp;
-    if (size > myPow(2, 30)) // just above 1 billion
-        throw std::runtime_error("Size is too big!");
     temp.resize(size, pair(default_value, 0));
     values = temp;
     Seed = seed;
@@ -240,7 +237,7 @@ template<typename T> void HopscotchHashSet<T>::resize() {
 
         bool flag = true; // is resize successful
         for (uint32_t i = 0; i < values.size(); ++i) {
-            if (values[i].first != default_value or (myMod(i - bad_bucket_ind, values.size()) <= HOP_RANGE // add if elem != default_value or is a real default_value
+            if (values[i].first != default_value or (myMod(i - bad_bucket_ind, values.size()) < HOP_RANGE // add if elem != default_value or is a stored default_value
                     and bit_check(bad_bucket_bitmap, i - bad_bucket_ind))) {
                 bool isAddSuccessful = newSet.tryadd(values[i].first);
                 if (!isAddSuccessful) {
@@ -305,29 +302,21 @@ template<typename T> bool HopscotchHashSet<T>::tryadd(T key) { // true if succes
     uint32_t freeaddind;
 
     for (uint32_t addind = 0; addind < static_cast<int>(ADD_RANGE); ++addind) {
-        if (values[(bucket_ind + addind) % size].first == default_value) {
-            // current index = bucket_ind + addind
-            // equals bad_bucket_ind + ..., 0 <= ... < HOP_RANGE
-            if (myMod(static_cast<int>(bucket_ind + addind - bad_bucket_ind), size) >= HOP_RANGE) { // TODO optimize here
-                // bad_bucket is out of range for current cell, thus default_value is fake
-                found = true;
-                freeaddind = addind;
-                break;
-            } else {
-                if (!bit_check(bad_bucket_bitmap,
-                               myMod(static_cast<int>(bucket_ind + addind - bad_bucket_ind), size))) {
-                    // found 0 on bad_bucket_bitmap ==> default_value is fake
-                    found = true;
-                    freeaddind = addind;
-                    break;
-                }
-                // else default_value is real, just do nothing
-            }
+        // current index = bucket_ind + addind
+        // equals bad_bucket_ind + ..., 0 <= ... < HOP_RANGE
+        if (values[(bucket_ind + addind) % size].first == default_value && (myMod(static_cast<int>(bucket_ind + addind - bad_bucket_ind), size) >= HOP_RANGE
+                || !bit_check(bad_bucket_bitmap,myMod(static_cast<int>(bucket_ind + addind - bad_bucket_ind), size)))) {
+            // if default_value is not stored, then we found free space
+            found = true;
+            freeaddind = addind;
+            break;
         }
+        // else default_value is stored, just do nothing
     }
 
     if (!found)
         return false;
+
     // otherwise found free space at bucket_ind + found_ind
     if (freeaddind < HOP_RANGE) {
         // we can insert without moving
@@ -340,8 +329,9 @@ template<typename T> bool HopscotchHashSet<T>::tryadd(T key) { // true if succes
     }
 
     // else we have to move elements
+    bool is_moved;
     while (freeaddind >= HOP_RANGE) {
-        bool is_moved = false;
+        is_moved = false;
         // check from left to right to see if we can swap some element with free cell
         for (uint32_t i = HOP_RANGE - 1; i > 0; --i) {
             // look at bucket that is i places to the left, check if we can move something from this bucket to the right
@@ -471,10 +461,10 @@ void testIntAdd(int numTries, int numElems) {
     cout << "Hopscotch time STD: " << hoptimestdev << endl;
     cout << "Average STL time: " << stltimemean << endl;
     cout << "STL time STD: " << stltimestdev << endl;
-    /*cout << "Average Hopscotch load: " << hoploadmean << endl;
+    cout << "Average Hopscotch load: " << hoploadmean << endl;
     cout << "Hopscotch load STD: " << hoploadstdev << endl;
     cout << "Average STL load: " << stlloadmean << endl;
-    cout << "STL load STD: " << stlloadstdev << endl;*/
+    cout << "STL load STD: " << stlloadstdev << endl;
     std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now(); // TODO make this work on any machine
     std::chrono::duration<double> time_elapsed = end - begin;
     cout << "Time elapsed: " << time_elapsed << endl;
@@ -775,7 +765,7 @@ void testIntFalseContains(int numTries, int numElems, int numChecks) {
 int main() {
     // TODO split in several files (HopscotchHashSet into .h, testing functions into another one)
     cout << "Testing...\n\n";
-    testIntAdd(100, 1'000'000);
+    //testIntAdd(100, 1'000'000);
     testIntRemove(100, 1'000'000, 1'000'000);
     testIntTrueContains(100, 1'000'000, 1'000'001);
     testIntFalseContains(100, 1'000'000, 1'000'001);
