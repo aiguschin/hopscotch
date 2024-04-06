@@ -28,7 +28,7 @@ using std::unordered_set;
 using std::unordered_multiset;
 using std::to_string;
 
-// helper functions
+// helper functions TODO add intrinsics?
 inline uint32_t bit_set(uint32_t number, uint32_t n) {
     return number | ((uint32_t)1 << n);
 }
@@ -66,19 +66,7 @@ inline void bit_set_to_change(uint32_t& number, uint32_t n, bool x) {
     number = (number & ~((uint32_t)1 << n)) | ((uint32_t)x << n);
 }
 
-/*uint32_t minbit(uint32_t x) { // returns minimal bit that equals 1
-    return static_cast<uint32_t>(log2(x & ~(x-1)));
-}*/
-
-/*inline uint32_t minbit(uint32_t x) {
-    unsigned long res;
-    unsigned char isNonzero = _BitScanReverse(&res, x);
-    if (isNonzero)
-        return res - 1;
-    return 0;
-}*/
-
-inline uint32_t minbit(uint32_t x) {
+inline uint32_t minbit(uint32_t x) { // TODO delete all inlines
     unsigned long res;
     unsigned char isNonzero = _BitScanForward(&res, x);
     return res * isNonzero;
@@ -157,7 +145,7 @@ private: // TODO dehardcode, add default init
 
     // We'll need these 2 for every call of ADD
     uint32_t bad_bucket_ind = 0; // index of bucket with ind==hash(default_value)
-    uint32_t bad_bucket_bitmap = 0; // bitmap of that bucket
+    uint32_t bad_bucket_bitmap = 0; // bitmap of that bucket TODO don't store it, instead get on-demand
 
     // initially filled with key=default_key and bitmap=0
     vector<pair<T, uint32_t>> values; // key + bitmap that contains info about ith bucket
@@ -277,21 +265,26 @@ template<typename T> void HopscotchHashSet<T>::resize() {
 }
 
 template<typename T> bool HopscotchHashSet<T>::contains(T key) {
-    uint32_t bucket_ind = myhash(key, Seed) % values.size();
+    int size = static_cast<int>(values.size());
+    uint32_t bucket_ind = myhash(key, Seed) % size;
     uint32_t bucket_bitmap = values[bucket_ind].second; // get bitmap
-    for (uint32_t i = 0; i < HOP_RANGE; ++i) { // TODO optimize with minbit?
-        // check if (bucket_ind + i)'th cell contains value corresponding to this bucket
-        if (bit_check(bucket_bitmap, i) && values[(bucket_ind + i) % values.size()].first == key) {
+    // iterate through 1s in bucket_bitmap, check values inside
+    while (bucket_bitmap) {
+        uint32_t ind = minbit(bucket_bitmap);
+        if (values[(bucket_ind + ind) % size].first == key) {
             return true;
+        } else {
+            bit_clear_change(bucket_bitmap, ind);
         }
     }
     return false;
 }
 
 template<typename T> void HopscotchHashSet<T>::remove(T key) {
+    int size = static_cast<int>(values.size());
     uint32_t bucket_ind = myhash(key, Seed) % values.size();
     uint32_t bucket_bitmap = values[bucket_ind].second; // get bitmap
-    for (uint32_t i = 0; i < HOP_RANGE; ++i) { // TODO optimize with minbit?
+    for (uint32_t i = 0; i < HOP_RANGE; ++i) { // minbit optimization does not work here -- probably because overhead is too big
         if (bit_check(bucket_bitmap, i) && values[(bucket_ind + i) % values.size()].first == key) {
             values[(bucket_ind + i) % values.size()].first = default_value;
             bit_clear_change(values[bucket_ind].second, i);
@@ -301,6 +294,7 @@ template<typename T> void HopscotchHashSet<T>::remove(T key) {
             return;
         }
     }
+
     // key not found
     throw std::runtime_error("Tried to remove non-existent element");
 }
