@@ -9,6 +9,9 @@
 #include <chrono>
 #include <numeric>
 #include <climits>
+#include <intrin.h>
+
+#pragma intrinsic(_BitScanForward)
 
 using std::vector;
 using std::cin;
@@ -63,8 +66,22 @@ inline void bit_set_to_change(uint32_t& number, uint32_t n, bool x) {
     number = (number & ~((uint32_t)1 << n)) | ((uint32_t)x << n);
 }
 
-uint32_t minbit(uint32_t x) { // returns minimal bit that equals 1
+/*uint32_t minbit(uint32_t x) { // returns minimal bit that equals 1
     return static_cast<uint32_t>(log2(x & ~(x-1)));
+}*/
+
+/*inline uint32_t minbit(uint32_t x) {
+    unsigned long res;
+    unsigned char isNonzero = _BitScanReverse(&res, x);
+    if (isNonzero)
+        return res - 1;
+    return 0;
+}*/
+
+inline uint32_t minbit(uint32_t x) {
+    unsigned long res;
+    unsigned char isNonzero = _BitScanForward(&res, x);
+    return res * isNonzero;
 }
 
 /*int myPow(int x, uint32_t p)
@@ -765,7 +782,7 @@ void testIntFalseContains(int numTries, int numElems, int numChecks) {
 int main() {
     // TODO split in several files (HopscotchHashSet into .h, testing functions into another one)
     cout << "Testing...\n\n";
-    //testIntAdd(100, 1'000'000);
+    testIntAdd(100, 1'000'000);
     testIntRemove(100, 1'000'000, 1'000'000);
     testIntTrueContains(100, 1'000'000, 1'000'001);
     testIntFalseContains(100, 1'000'000, 1'000'001);
