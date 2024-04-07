@@ -29,58 +29,48 @@ using std::unordered_multiset;
 using std::to_string;
 
 // helper functions TODO add intrinsics?
-inline uint32_t bit_set(uint32_t number, uint32_t n) {
+uint32_t bit_set(uint32_t number, uint32_t n) {
     return number | ((uint32_t)1 << n);
 }
 
-inline uint32_t bit_clear(uint32_t number, uint32_t n) {
+uint32_t bit_clear(uint32_t number, uint32_t n) {
     return number & ~((uint32_t)1 << n);
 }
 
-inline uint32_t bit_toggle(uint32_t number, uint32_t n) {
+uint32_t bit_toggle(uint32_t number, uint32_t n) {
     return number ^ ((uint32_t)1 << n);
 }
 
-inline bool bit_check(uint32_t number, uint32_t n) {
+bool bit_check(uint32_t number, uint32_t n) {
     return (number >> n) & (uint32_t)1;
 }
 
-inline uint32_t bit_set_to(uint32_t number, uint32_t n, bool x) {
+uint32_t bit_set_to(uint32_t number, uint32_t n, bool x) {
     return (number & ~((uint32_t)1 << n)) | ((uint32_t)x << n);
 }
 
 // following functions change the number instead of returning it
-inline void bit_set_change(uint32_t& number, uint32_t n) {
+void bit_set_change(uint32_t& number, uint32_t n) {
     number |= ((uint32_t)1 << n);
 }
 
-inline void bit_clear_change(uint32_t& number, uint32_t n) {
+void bit_clear_change(uint32_t& number, uint32_t n) {
     number &= ~((uint32_t)1 << n);
 }
 
-inline void bit_toggle_change(uint32_t& number, uint32_t n) {
+void bit_toggle_change(uint32_t& number, uint32_t n) {
     number ^= ((uint32_t)1 << n);
 }
 
-inline void bit_set_to_change(uint32_t& number, uint32_t n, bool x) {
+void bit_set_to_change(uint32_t& number, uint32_t n, bool x) {
     number = (number & ~((uint32_t)1 << n)) | ((uint32_t)x << n);
 }
 
-inline uint32_t minbit(uint32_t x) { // TODO delete all inlines
+uint32_t minbit(uint32_t x) {
     unsigned long res;
     unsigned char isNonzero = _BitScanForward(&res, x);
     return res * isNonzero;
 }
-
-/*int myPow(int x, uint32_t p)
-{
-    if (p == 0) return 1;
-    if (p == 1) return x;
-
-    int tmp = myPow(x, p/2);
-    if (p % 2 == 0) return tmp * tmp;
-    else return x * tmp * tmp;
-}*/
 
 uint32_t myMod(int x, int p) {
     // Returns MATHEMATICALLY x % p (the number from 0 to p-1)
@@ -92,7 +82,7 @@ uint32_t myMod(int x, int p) {
 const uint32_t Prime = 0x01000193; //   16777619
 const uint32_t recommendedSeed  = 0x811C9DC5; // 2166136261
 
-inline uint32_t fnv1a(unsigned char oneByte, uint32_t hash /*= Seed*/)
+uint32_t fnv1a(unsigned char oneByte, uint32_t hash /*= Seed*/)
 {
     return (oneByte ^ hash) * Prime;
 }
@@ -135,7 +125,7 @@ uint32_t generateSeed() {
 }
 
 // https://en.wikipedia.org/wiki/Hopscotch_hashing
-template<typename T> class HopscotchHashSet { // TODO optimize performance by removing IF's
+template<typename T> class HopscotchHashSet {
 private: // TODO dehardcode, add default init
     static const uint32_t HOP_RANGE = 32; // max range for key to be from bucket, can't be increased without changing bitmap type
     static const uint32_t ADD_RANGE = 256; // max range for looking into empty cell
@@ -288,8 +278,10 @@ template<typename T> void HopscotchHashSet<T>::remove(T key) {
         if (bit_check(bucket_bitmap, i) && values[(bucket_ind + i) % values.size()].first == key) {
             values[(bucket_ind + i) % values.size()].first = default_value;
             bit_clear_change(values[bucket_ind].second, i);
-            if (key == default_value)
+            if (bucket_ind == bad_bucket_ind)
                 bit_clear_change(bad_bucket_bitmap, i);
+            //bit_set_to_change(bad_bucket_bitmap, i, bit_check(bad_bucket_bitmap, i) * (bucket_ind == bad_bucket_ind));
+            // the line above works slower than if -- tested
             --num_elements;
             return;
         }
@@ -476,9 +468,9 @@ void testIntAdd(int numTries, int numElems) {
     cout << "Hopscotch load STD: " << hoploadstdev << endl;
     cout << "Average STL load: " << stlloadmean << endl;
     cout << "STL load STD: " << stlloadstdev << endl;
-    std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now(); // TODO make this work on any machine
-    std::chrono::duration<double> time_elapsed = end - begin;
-    cout << "Time elapsed: " << time_elapsed << endl;
+    std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+    std::chrono::duration<double> time_elapsed = std::chrono::duration_cast<std::chrono::seconds>(end - begin);
+    cout << "Time elapsed: " << time_elapsed.count() << "s" << endl;
     cout << "Ratio: " << stltimemean / hoptimemean << endl;
     cout << endl;
 }
@@ -554,8 +546,8 @@ void testIntRemove(int numTries, int numElems, int numChecks) {
     cout << "Average STL time: " << stlmean << endl;
     cout << "STL STD: " << stlstdev << endl;
     std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-    std::chrono::duration<double> time_elapsed = end - begin;
-    cout << "Time elapsed: " << time_elapsed << endl;
+    std::chrono::duration<double> time_elapsed = std::chrono::duration_cast<std::chrono::seconds>(end - begin);
+    cout << "Time elapsed: " << time_elapsed.count() << "s" << endl;
     cout << "Ratio: " << stlmean / hopmean << endl;
     cout << endl;
 }
@@ -657,8 +649,8 @@ void testIntTrueContains(int numTries, int numElems, int numChecks) {
     cout << "Average STL load: " << stlloadmean << endl;
     cout << "STL load STD: " << stlloadstdev << endl;*/
     std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-    std::chrono::duration<double> time_elapsed = end - begin;
-    cout << "Time elapsed: " << time_elapsed << endl;
+    std::chrono::duration<double> time_elapsed = std::chrono::duration_cast<std::chrono::seconds>(end - begin);
+    cout << "Time elapsed: " << time_elapsed.count() << "s" << endl;
     cout << "Counter: " << counter << endl;
     cout << "Ratio: " << stltimemean / hoptimemean << endl;
     cout << endl;
@@ -766,8 +758,8 @@ void testIntFalseContains(int numTries, int numElems, int numChecks) {
     cout << "Average STL load: " << stlloadmean << endl;
     cout << "STL load STD: " << stlloadstdev << endl;*/
     std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-    std::chrono::duration<double> time_elapsed = end - begin;
-    cout << "Time elapsed: " << time_elapsed << endl;
+    std::chrono::duration<double> time_elapsed = std::chrono::duration_cast<std::chrono::seconds>(end - begin);
+    cout << "Time elapsed: " << time_elapsed.count() << "s" << endl;
     cout << "Counter: " << counter << endl;
     cout << "Ratio: " << stltimemean / hoptimemean << endl;
     cout << endl;
