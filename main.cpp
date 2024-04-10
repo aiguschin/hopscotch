@@ -127,25 +127,41 @@ uint32_t generateSeed() {
 // https://en.wikipedia.org/wiki/Hopscotch_hashing
 template<typename T> class HopscotchHashSet {
 private: // TODO dehardcode, add default init
-    static const uint32_t HOP_RANGE = 32; // max range for key to be from bucket, can't be increased without changing bitmap type
+    /*static const uint32_t HOP_RANGE = 32; // max range for key to be from bucket, can't be increased without changing bitmap type
     static const uint32_t ADD_RANGE = 256; // max range for looking into empty cell
     static const uint32_t MAX_TRIES = 5; // max tries for consecutive resizing
-    uint32_t Seed = 0x811C9DC5;
+    uint32_t Seed = 0x811C9DC5;*/
     T default_value{};
 
     // We'll need these 2 for every call of ADD
     uint32_t bad_bucket_ind = 0; // index of bucket with ind==hash(default_value)
-    uint32_t bad_bucket_bitmap = 0; // bitmap of that bucket TODO don't store it, instead get on-demand
+    uint32_t bad_bucket_bitmap = 0; // bitmap of that bucket
 
     // initially filled with key=default_key and bitmap=0
     vector<pair<T, uint32_t>> values; // key + bitmap that contains info about ith bucket
 
     void resize(); // double the size, rehash
     bool tryadd(T key); // add element without resize
-    uint32_t num_elements = 0; // number of elements TODO maybe not increment it each time and make it an O(n) function?
+    uint32_t num_elements = 0; // number of elements
     bool is_resize_allowed = true; // if false, table will just die instead of resizing -- for testing purposes
 
+    // hopscotch parameters, initialized to defaults
+    uint32_t HOP_RANGE = 32; // must be <= 32, default==32
+    uint32_t ADD_RANGE = 256; // should be >= HOP_RANGE, default==256
+    uint32_t MAX_TRIES = 5; // must be > 0, default==5
+    uint32_t Seed = 0x811C9DC5;
 public:
+    // create with default parameters
+    HopscotchHashSet() {
+        // use defaults
+    }
+    // create with specific parameters TODO validate params
+    HopscotchHashSet(uint32_t init_HOP_RANGE, uint32_t init_ADD_RANGE, uint32_t init_MAX_TRIES, uint32_t init_Seed) {
+        HOP_RANGE = init_HOP_RANGE;
+        ADD_RANGE = init_ADD_RANGE;
+        MAX_TRIES = init_MAX_TRIES;
+        Seed = init_Seed;
+    }
     void init(uint32_t size = 1024, uint32_t seed = recommendedSeed); // init table of this size and this seed
     bool contains(T key);
     bool add (T key); // add with resize if needed
@@ -227,7 +243,7 @@ template<typename T> void HopscotchHashSet<T>::resize() {
 
         // since operating big sized tables is just painful, increase the size linearly
         // create new table with size (2 + i) * prev_size and previous seed, then add elements 1 by 1
-        HopscotchHashSet newSet;
+        HopscotchHashSet<T> newSet;
         newSet.init((2 + iteration) * values.size(), seed);
 
         bool flag = true; // is resize successful
