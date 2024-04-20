@@ -1,52 +1,33 @@
-#include <iostream>
-#include <vector>
-#include <string>
-#include <random>
-#include <stdexcept>
 #include <algorithm>
 #include <cassert>
-#include <unordered_set>
 #include <chrono>
-#include <numeric>
 #include <climits>
 #include <intrin.h>
+#include <iostream>
+#include <numeric>
+#include <random>
+#include <stdexcept>
+#include <string>
+#include <unordered_set>
+#include <vector>
 
 #pragma intrinsic(_BitScanForward)
 
-using std::vector;
-using std::cin;
 using std::cout;
 using std::endl;
 using std::pair;
-using std::string;
-using std::to_string;
-using std::uniform_int_distribution;
+using std::vector;
 using std::random_device;
-using std::mt19937;
+using std::string;
 using std::swap;
-using std::unordered_set;
+using std::uniform_int_distribution;
 using std::unordered_multiset;
-using std::to_string;
+using std::unordered_set;
+using std::mt19937;
 
 // helper functions TODO add intrinsics?
-uint32_t bit_set(uint32_t number, uint32_t n) {
-    return number | ((uint32_t)1 << n);
-}
-
-uint32_t bit_clear(uint32_t number, uint32_t n) {
-    return number & ~((uint32_t)1 << n);
-}
-
-uint32_t bit_toggle(uint32_t number, uint32_t n) {
-    return number ^ ((uint32_t)1 << n);
-}
-
 bool bit_check(uint32_t number, uint32_t n) {
     return (number >> n) & (uint32_t)1;
-}
-
-uint32_t bit_set_to(uint32_t number, uint32_t n, bool x) {
-    return (number & ~((uint32_t)1 << n)) | ((uint32_t)x << n);
 }
 
 // following functions change the number instead of returning it
@@ -58,21 +39,13 @@ void bit_clear_change(uint32_t& number, uint32_t n) {
     number &= ~((uint32_t)1 << n);
 }
 
-void bit_toggle_change(uint32_t& number, uint32_t n) {
-    number ^= ((uint32_t)1 << n);
-}
-
-void bit_set_to_change(uint32_t& number, uint32_t n, bool x) {
-    number = (number & ~((uint32_t)1 << n)) | ((uint32_t)x << n);
-}
-
 uint32_t minbit(uint32_t x) {
     unsigned long res;
     unsigned char isNonzero = _BitScanForward(&res, x);
     return res * isNonzero;
 }
 
-uint32_t myMod(int x, int p) {
+uint32_t math_mod(int x, int p) {
     // Returns MATHEMATICALLY x % p (the number from 0 to p-1)
     // p must be positive
     assert(p > 0);
@@ -80,7 +53,7 @@ uint32_t myMod(int x, int p) {
 }
 
 const uint32_t Prime = 0x01000193; //   16777619
-const uint32_t recommendedSeed  = 0x811C9DC5; // 2166136261
+const uint32_t default_seed = 0x811C9DC5; // 2166136261
 
 uint32_t fnv1a(unsigned char oneByte, uint32_t hash /*= Seed*/)
 {
@@ -116,7 +89,7 @@ template<typename T> uint32_t myhash(T key, uint32_t seed) {
     return fnv1a(&key, sizeof(key), seed);
 }
 
-uint32_t generateSeed() {
+uint32_t generate_seed() { // TODO move to xorshift
     random_device rd;
     mt19937 gen(rd());
     uniform_int_distribution<uint32_t> distrib(0, 4294967295); // from 0 to max uint32_t
@@ -126,30 +99,27 @@ uint32_t generateSeed() {
 
 // https://en.wikipedia.org/wiki/Hopscotch_hashing
 template<typename T> class HopscotchHashSet {
-private: // TODO dehardcode, add default init
-    /*static const uint32_t HOP_RANGE = 32; // max range for key to be from bucket, can't be increased without changing bitmap type
-    static const uint32_t ADD_RANGE = 256; // max range for looking into empty cell
-    static const uint32_t MAX_TRIES = 5; // max tries for consecutive resizing
-    uint32_t Seed = 0x811C9DC5;*/
-    T default_value{};
-
-    // We'll need these 2 for every call of ADD
-    uint32_t bad_bucket_ind = 0; // index of bucket with ind==hash(default_value)
-    uint32_t bad_bucket_bitmap = 0; // bitmap of that bucket
-
-    // initially filled with key=default_key and bitmap=0
-    vector<pair<T, uint32_t>> values; // key + bitmap that contains info about ith bucket
-
-    void resize(); // double the size, rehash
-    bool tryadd(T key); // add element without resize
-    uint32_t num_elements = 0; // number of elements
-    bool is_resize_allowed = true; // if false, table will just die instead of resizing -- for testing purposes
+private:
+    const T default_value{};
 
     // hopscotch parameters, initialized to defaults
     uint32_t HOP_RANGE = 32; // must be <= 32, default==32
     uint32_t ADD_RANGE = 256; // should be >= HOP_RANGE, default==256
     uint32_t MAX_TRIES = 5; // must be > 0, default==5
     uint32_t Seed = 0x811C9DC5;
+
+    uint32_t bad_bucket_ind = 0; // index of bucket with ind==hash(default_value)
+    uint32_t bad_bucket_bitmap = 0; // bitmap of that bucket
+    uint32_t num_elements = 0; // number of elements
+
+    // initially filled with key=default_key and bitmap=0
+    vector<pair<T, uint32_t>> values; // key + bitmap that contains info about ith bucket
+
+    bool is_resize_allowed = true; // if false, table will just die instead of resizing -- for testing purposes
+
+    void resize(); // double the size, rehash
+    bool tryadd(T key); // add element without resize
+
 public:
     // create with default parameters
     HopscotchHashSet() {
@@ -162,23 +132,26 @@ public:
         MAX_TRIES = init_MAX_TRIES;
         Seed = init_Seed;
     }
-    void init(uint32_t size = 1024, uint32_t seed = recommendedSeed); // init table of this size and this seed
-    bool contains(T key);
-    bool add (T key); // add with resize if needed
-    void remove(T key);
-    void print(); // prints table
-    double load_factor(); // get load factor of a table
+    void init(uint32_t size = 1024, uint32_t seed = default_seed); // init table of this size and this seed
+    bool contains(T key) const;
+    void add (T key); // add with resize if needed
+    void remove(T key); // throws exception if no element found
+    void print() const; // prints table
     void allow_resize(bool allow); // toggle is_resize_allowed
-    vector<T> get_values(); // returns values as vector
-    vector<uint32_t> get_bitmaps(); // returns bitmaps
-    int get_num_elements(); // return number of elements
+
+    [[nodiscard]] double load_factor() const; // get load factor of a table, 0 <= load_factor <= 1
+
+    // for debugging purposes
+    [[nodiscard]] vector<T> get_values() const; // returns values as vector
+    [[nodiscard]] vector<uint32_t> get_bitmaps() const; // returns bitmaps
+    [[nodiscard]] int get_num_elements() const; // return number of elements
 };
 
-template<typename T> int HopscotchHashSet<T>::get_num_elements() {
+template<typename T> int HopscotchHashSet<T>::get_num_elements() const {
     return num_elements;
 }
 
-template<typename T> vector<uint32_t> HopscotchHashSet<T>::get_bitmaps() {
+template<typename T> vector<uint32_t> HopscotchHashSet<T>::get_bitmaps() const {
     vector<uint32_t> res;
     res.reserve(values.size());
     for (auto v : values) {
@@ -187,7 +160,7 @@ template<typename T> vector<uint32_t> HopscotchHashSet<T>::get_bitmaps() {
     return res;
 }
 
-template<typename T> vector<T> HopscotchHashSet<T>::get_values() {
+template<typename T> vector<T> HopscotchHashSet<T>::get_values() const {
     vector<T> res;
     res.reserve(values.size());
     for (auto v : values) {
@@ -196,7 +169,7 @@ template<typename T> vector<T> HopscotchHashSet<T>::get_values() {
     return res;
 }
 
-template<typename T> double HopscotchHashSet<T>::load_factor() {
+template<typename T> double HopscotchHashSet<T>::load_factor() const {
     if (values.empty())
         return 0.0; // for empty table I think it makes sense
     return static_cast<double>(num_elements) / static_cast<double>(values.size());
@@ -206,7 +179,7 @@ template<typename T> void HopscotchHashSet<T>::allow_resize(bool allow) {
     is_resize_allowed = allow;
 }
 
-template<typename T> void HopscotchHashSet<T>::print() {
+template<typename T> void HopscotchHashSet<T>::print() const {
     // T must be cout-able
     cout << "Table: ";
     for (const auto& v: values) {
@@ -226,10 +199,10 @@ template<typename T> void HopscotchHashSet<T>::print() {
 template<typename T> void HopscotchHashSet<T>::init(uint32_t size, uint32_t seed) {
     vector<pair<T, uint32_t>> temp;
     temp.resize(size, pair(default_value, 0));
-    values = temp;
+    swap(values, temp);
     Seed = seed;
     bad_bucket_bitmap = 0;
-    bad_bucket_ind = myhash(default_value, Seed) % values.size();
+    bad_bucket_ind = size ? myhash(default_value, Seed) % size : 0; // init bad_bucket_ind with something if we init table of size 0 here
     num_elements = 0;
     is_resize_allowed = true;
 }
@@ -238,7 +211,7 @@ template<typename T> void HopscotchHashSet<T>::resize() {
     if (!is_resize_allowed)
         throw std::runtime_error("Resize is not allowed!");
     for (uint32_t iteration = 1; iteration <= MAX_TRIES; ++iteration) {
-        uint32_t seed = generateSeed(); // generate new seed,
+        uint32_t seed = generate_seed(); // generate new seed,
         // because 2xing the size won't resolve hash collision -- just make 2x fewer collisions in any bucket
 
         // since operating big sized tables is just painful, increase the size linearly
@@ -248,8 +221,8 @@ template<typename T> void HopscotchHashSet<T>::resize() {
 
         bool flag = true; // is resize successful
         for (uint32_t i = 0; i < values.size(); ++i) {
-            if (values[i].first != default_value or (myMod(i - bad_bucket_ind, values.size()) < HOP_RANGE // add if elem != default_value or is a stored default_value
-                    and bit_check(bad_bucket_bitmap, i - bad_bucket_ind))) {
+            if (values[i].first != default_value || (math_mod(i - bad_bucket_ind, values.size()) < HOP_RANGE // add if elem != default_value or is a stored default_value
+                    && bit_check(bad_bucket_bitmap, i - bad_bucket_ind))) {
                 bool isAddSuccessful = newSet.tryadd(values[i].first);
                 if (!isAddSuccessful) {
                     flag = false;
@@ -258,7 +231,7 @@ template<typename T> void HopscotchHashSet<T>::resize() {
             }
         }
         if (flag) {
-            values = newSet.values;
+            swap(values, newSet.values);
             Seed = newSet.Seed;
             bad_bucket_bitmap = newSet.bad_bucket_bitmap;
             bad_bucket_ind = newSet.bad_bucket_ind;
@@ -270,7 +243,7 @@ template<typename T> void HopscotchHashSet<T>::resize() {
     throw std::runtime_error("Error: Can not resize table");
 }
 
-template<typename T> bool HopscotchHashSet<T>::contains(T key) {
+template<typename T> bool HopscotchHashSet<T>::contains(T key) const {
     int size = static_cast<int>(values.size());
     uint32_t bucket_ind = myhash(key, Seed) % size;
     uint32_t bucket_bitmap = values[bucket_ind].second; // get bitmap
@@ -279,9 +252,8 @@ template<typename T> bool HopscotchHashSet<T>::contains(T key) {
         uint32_t ind = minbit(bucket_bitmap);
         if (values[(bucket_ind + ind) % size].first == key) {
             return true;
-        } else {
-            bit_clear_change(bucket_bitmap, ind);
         }
+        bit_clear_change(bucket_bitmap, ind);
     }
     return false;
 }
@@ -290,7 +262,7 @@ template<typename T> void HopscotchHashSet<T>::remove(T key) {
     int size = static_cast<int>(values.size());
     uint32_t bucket_ind = myhash(key, Seed) % values.size();
     uint32_t bucket_bitmap = values[bucket_ind].second; // get bitmap
-    for (uint32_t i = 0; i < HOP_RANGE; ++i) { // minbit optimization does not work here -- probably because overhead is too big
+    for (uint32_t i = 0; i < HOP_RANGE; ++i) { // minbit optimization slows things down here -- probably because overhead is too big
         if (bit_check(bucket_bitmap, i) && values[(bucket_ind + i) % values.size()].first == key) {
             values[(bucket_ind + i) % values.size()].first = default_value;
             bit_clear_change(values[bucket_ind].second, i);
@@ -323,8 +295,8 @@ template<typename T> bool HopscotchHashSet<T>::tryadd(T key) { // true if succes
     for (uint32_t addind = 0; addind < static_cast<int>(ADD_RANGE); ++addind) {
         // current index = bucket_ind + addind
         // equals bad_bucket_ind + ..., 0 <= ... < HOP_RANGE
-        if (values[(bucket_ind + addind) % size].first == default_value && (myMod(static_cast<int>(bucket_ind + addind - bad_bucket_ind), size) >= HOP_RANGE
-                || !bit_check(bad_bucket_bitmap,myMod(static_cast<int>(bucket_ind + addind - bad_bucket_ind), size)))) {
+        if (values[(bucket_ind + addind) % size].first == default_value && (math_mod(static_cast<int>(bucket_ind + addind - bad_bucket_ind), size) >= HOP_RANGE
+                || !bit_check(bad_bucket_bitmap,math_mod(static_cast<int>(bucket_ind + addind - bad_bucket_ind), size)))) {
             // if default_value is not stored, then we found free space
             found = true;
             freeaddind = addind;
@@ -347,14 +319,13 @@ template<typename T> bool HopscotchHashSet<T>::tryadd(T key) { // true if succes
         return true;
     }
 
-    // else we have to move elements
-    bool is_moved;
+    // else we have to move elements=
     while (freeaddind >= HOP_RANGE) {
-        is_moved = false;
+        bool is_moved = false;
         // check from left to right to see if we can swap some element with free cell
         for (uint32_t i = HOP_RANGE - 1; i > 0; --i) {
             // look at bucket that is i places to the left, check if we can move something from this bucket to the right
-            uint32_t check_ind = myMod(static_cast<int>(bucket_ind + freeaddind - i), size);
+            uint32_t check_ind = math_mod(static_cast<int>(bucket_ind + freeaddind - i), size);
             uint32_t minind = minbit(values[check_ind].second); // index of minimal bit in bucket check_ind
             if (values[check_ind].second && minind < i) {
                 // if there is a key in bucket bucket_ind + freeaddind - i below index bucket_ind + freeaddind
@@ -381,24 +352,24 @@ template<typename T> bool HopscotchHashSet<T>::tryadd(T key) { // true if succes
     return true;
 }
 
-template<typename T> bool HopscotchHashSet<T>::add(T key) { // true if no resize happened, false if resize
+template<typename T> void HopscotchHashSet<T>::add(T key) { // true if no resize happened, false if resize
     bool is_successful = tryadd(key);
     if (is_successful)
-        return true;
+        return;
     uint32_t iter_count = 0;
     while (iter_count < MAX_TRIES) {
         resize();
         bool is_successful_now = tryadd(key);
         if (is_successful_now)
-            return false;
+            return;
         ++iter_count;
     }
     // Failed to add element
     uint32_t bucket_ind = myhash(key, Seed) % values.size();
     T elem = values[bucket_ind].first;
-    bool flag = true; // check if we have 33 equal elems
+    bool flag = true; // check if we have HOP_RANGE + 1 equal elems
     for (int i = 1; i < HOP_RANGE; ++i) {
-        uint32_t check_ind = myMod(i + bucket_ind, values.size());
+        uint32_t check_ind = math_mod(i + bucket_ind, values.size());
         if (values[check_ind].first != elem) {
             flag = false;
             break;
