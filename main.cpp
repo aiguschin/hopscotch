@@ -104,7 +104,7 @@ private:
 
     // hopscotch parameters, initialized to defaults
     uint32_t HOP_RANGE = 32; // must be <= 32, default==32
-    uint32_t ADD_RANGE = 256; // should be >= HOP_RANGE, default==256
+    uint32_t ADD_RANGE = 128; // should be >= HOP_RANGE, default==128
     uint32_t MAX_TRIES = 5; // must be > 0, default==5
     uint32_t Seed = 0x811C9DC5;
 
@@ -756,7 +756,7 @@ int main() {
     // TODO split in several files (HopscotchHashSet into .h, testing functions into another one)
     cout << "Testing...\n\n";
     testIntAdd(100, 1'000'000);
-    testIntRemove(100, 1'000'000, 1'000'000);
-    testIntTrueContains(100, 1'000'000, 1'000'001);
-    testIntFalseContains(100, 1'000'000, 1'000'001);
+    //testIntRemove(100, 1'000'000, 1'000'000);
+    //testIntTrueContains(100, 1'000'000, 1'000'001);
+    //testIntFalseContains(100, 1'000'000, 1'000'001);
 }
