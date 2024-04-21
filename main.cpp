@@ -292,7 +292,7 @@ template<typename T> bool HopscotchHashSet<T>::tryadd(T key) { // true if succes
     bool found = false;
     uint32_t freeaddind;
 
-    for (uint32_t addind = 0; addind < static_cast<int>(ADD_RANGE); ++addind) {
+    for (uint32_t addind = 0; addind < std::min(static_cast<int>(ADD_RANGE), size); ++addind) { // std::min to avoid checking 1 position multiple times
         // current index = bucket_ind + addind
         // equals bad_bucket_ind + ..., 0 <= ... < HOP_RANGE
         if (values[(bucket_ind + addind) % size].first == default_value && (math_mod(static_cast<int>(bucket_ind + addind - bad_bucket_ind), size) >= HOP_RANGE
