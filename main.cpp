@@ -210,14 +210,14 @@ template<typename T> void HopscotchHashSet<T>::init(uint32_t size, uint32_t seed
 template<typename T> void HopscotchHashSet<T>::resize() {
     if (!is_resize_allowed)
         throw std::runtime_error("Resize is not allowed!");
-    for (uint32_t iteration = 1; iteration <= MAX_TRIES; ++iteration) {
-        uint32_t seed = generate_seed(); // generate new seed,
+    for (uint32_t iteration = 0; iteration < MAX_TRIES; ++iteration) {
+        uint32_t seed = generate_seed(); // generate new seed
         // because 2xing the size won't resolve hash collision -- just make 2x fewer collisions in any bucket
 
         // since operating big sized tables is just painful, increase the size linearly
         // create new table with size (2 + i) * prev_size and previous seed, then add elements 1 by 1
         HopscotchHashSet<T> newSet;
-        newSet.init((2 + iteration) * values.size(), seed);
+        newSet.init(round((2 + iteration) * values.size()), seed); // TODO XXX + iteration ?
 
         bool flag = true; // is resize successful
         for (uint32_t i = 0; i < values.size(); ++i) {
@@ -236,8 +236,14 @@ template<typename T> void HopscotchHashSet<T>::resize() {
             bad_bucket_bitmap = newSet.bad_bucket_bitmap;
             bad_bucket_ind = newSet.bad_bucket_ind;
             num_elements = newSet.num_elements;
+            //cout << "New size: " << values.size() << ", new element num: " << num_elements  << ", load_factor before resize: " << load_factor() * 2 << endl; // TODO remove
             return;
         }
+
+        if (iteration > 0) { // TODO comment
+            cout << "Failed resize: " << iteration << endl;
+        }
+
     }
     // Failed to resize & rehash table for some reason
     throw std::runtime_error("Error: Can not resize table");
@@ -259,7 +265,6 @@ template<typename T> bool HopscotchHashSet<T>::contains(T key) const {
 }
 
 template<typename T> void HopscotchHashSet<T>::remove(T key) {
-    int size = static_cast<int>(values.size());
     uint32_t bucket_ind = myhash(key, Seed) % values.size();
     uint32_t bucket_bitmap = values[bucket_ind].second; // get bitmap
     for (uint32_t i = 0; i < HOP_RANGE; ++i) { // minbit optimization slows things down here -- probably because overhead is too big
@@ -305,8 +310,11 @@ template<typename T> bool HopscotchHashSet<T>::tryadd(T key) { // true if succes
         // else default_value is stored, just do nothing
     }
 
-    if (!found)
+    if (!found) {
+        // TODO change this to checking freeaddind instead -- code cleaning
+        //cout << "Tryadd failed -- empty space is too far" << endl; // TODO comment
         return false;
+    }
 
     // otherwise found free space at bucket_ind + found_ind
     if (freeaddind < HOP_RANGE) {
@@ -339,9 +347,11 @@ template<typename T> bool HopscotchHashSet<T>::tryadd(T key) { // true if succes
                 break;
             }
         }
-        if (!is_moved)
-            // couldn't move free space
+        if (!is_moved) {
+            // couldn't move empty space
+            //cout << "Tryadd failed -- couldn't move empty space" << endl; // TODO comment
             return false;
+        }
     }
     // now that we moved elements, free space is in range HOP_RANGE
     values[(bucket_ind + freeaddind) % size].first = key;
@@ -356,12 +366,18 @@ template<typename T> void HopscotchHashSet<T>::add(T key) { // true if no resize
     bool is_successful = tryadd(key);
     if (is_successful)
         return;
+    //cout << "Starting resize sequence..." << endl;
     uint32_t iter_count = 0;
     while (iter_count < MAX_TRIES) {
         resize();
         bool is_successful_now = tryadd(key);
         if (is_successful_now)
             return;
+
+        /*if (iter_count > 0) {
+            cout << "Add failed: " << iter_count << endl; // TODO comment
+        }*/
+
         ++iter_count;
     }
     // Failed to add element
@@ -406,6 +422,7 @@ void testIntAdd(int numTries, int numElems) {
         // do testing
         std::chrono::steady_clock::time_point hopstart = std::chrono::steady_clock::now();
         HopscotchHashSet<int> hoptable;
+
         for (auto key : keys) {
             hoptable.add(key);
         }
@@ -426,7 +443,7 @@ void testIntAdd(int numTries, int numElems) {
         stlloads.push_back(stlset.load_factor());
     }
 
-    double hoptimesum = std::accumulate(hoptimes.begin(), hoptimes.end(), 0.0);
+    double hoptimesum = std::accumulate(hoptimes.begin(), hoptimes.end(), 0.0); // TODO change to reduce?
     double hoptimemean = hoptimesum / static_cast<double>(hoptimes.size());
     double hoptimesq_sum = std::inner_product(hoptimes.begin(), hoptimes.end(), hoptimes.begin(), 0.0);
     double hoptimestdev = std::sqrt(hoptimesq_sum / static_cast<double>(hoptimes.size()) - hoptimemean * hoptimemean);
@@ -480,6 +497,7 @@ void testIntRemove(int numTries, int numElems, int numChecks) {
         // generate elems
         vector<int> keys;
         keys.reserve(numElems);
+
         for (int j = 0; j < numElems; ++j) {
             keys.push_back(distrib(gen));
         }
@@ -490,6 +508,7 @@ void testIntRemove(int numTries, int numElems, int numChecks) {
         auto rng = std::default_random_engine {rd()};
         std::shuffle(std::begin(testkeys), std::end(testkeys), rng);
         HopscotchHashSet<int> hoptable;
+
         for (auto key : keys) {
             hoptable.add(key);
         }
@@ -670,7 +689,7 @@ void testIntFalseContains(int numTries, int numElems, int numChecks) {
         }
 
         // fill stlset first! required for testing
-        unordered_multiset<int> stlset;
+        unordered_set<int> stlset;
         for (auto key : keys) {
             stlset.insert(key);
         }
@@ -755,8 +774,34 @@ void testIntFalseContains(int numTries, int numElems, int numChecks) {
 int main() {
     // TODO split in several files (HopscotchHashSet into .h, testing functions into another one)
     cout << "Testing...\n\n";
-    testIntAdd(100, 1'000'000);
-    //testIntRemove(100, 1'000'000, 1'000'000);
-    //testIntTrueContains(100, 1'000'000, 1'000'001);
-    //testIntFalseContains(100, 1'000'000, 1'000'001);
+    /*cout << "---------------1k entries:-------------------" << endl;
+    testIntAdd(50000, 1'000);
+    testIntRemove(500, 1'000, 1'000);
+    testIntTrueContains(500, 1'000, 2'000);
+    testIntFalseContains(500, 1'000, 2'000);
+    cout << "---------------10k entries:-------------------" << endl;
+    testIntAdd(5000, 10'000);
+    testIntRemove(500, 10'000, 10'000);
+    testIntTrueContains(50, 10'000, 20'000);
+    testIntFalseContains(500, 10'000, 20'000);
+    cout << "---------------100k entries:-------------------" << endl;
+    testIntAdd(500, 100'000);
+    testIntRemove(50, 100'000, 100'000);
+    testIntTrueContains(50, 100'000, 200'000);
+    testIntFalseContains(50, 100'000, 200'000);
+    cout << "---------------1mil entries:-------------------" << endl;
+    testIntAdd(50, 1'000'000);*/
+    testIntRemove(50, 1'000'000, 1'000'000);
+    /*testIntTrueContains(50, 1'000'000, 2'000'000);
+    testIntFalseContains(50, 1'000'000, 2'000'000);
+    cout << "---------------10mil entries:-------------------" << endl;
+    testIntAdd(5, 10'000'000);
+    testIntRemove(5, 10'000'000, 10'000'000);
+    testIntTrueContains(5, 10'000'000, 20'000'000);
+    testIntFalseContains(5, 10'000'000, 20'000'000);*/
+    cout << "---------------100mil entries:-------------------" << endl;
+    /*testIntAdd(1, 100'000'000);
+    testIntRemove(1, 100'000'000, 100'000'000);
+    testIntTrueContains(1, 100'000'000, 200'000'000);
+    testIntFalseContains(1, 100'000'000, 200'000'000);*/
 }
